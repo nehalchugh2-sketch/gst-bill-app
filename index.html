@@ -9,10 +9,11 @@
   <link rel="icon" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <title>GST Bill</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=6" />
 </head>
 <body>
   <div class="app" id="app">
+    <div class="app-version" id="gst-app-version">v6</div>
     <!-- HOME -->
     <section class="screen active" id="screen-home">
       <div class="topbar">
@@ -173,7 +174,7 @@
         <button class="btn btn-secondary btn-block" id="btn-add-transporter-inline" style="margin-bottom:12px">+ New transporter</button>
         <div class="card hidden" id="transporter-form-card" style="box-shadow:none;margin-bottom:12px"></div>
         <div class="field">
-          <label>Vehicle No / गाड़ी नंबर (optional)</label>
+          <label>Vehicle No / गाड़ी नंबर (Part B, optional)</label>
           <input id="eway-vehicle" placeholder="UP65AB1234" autocomplete="off" />
         </div>
         <div class="row">
@@ -186,7 +187,19 @@
             <select id="eway-mode"><option value="1">Road / सड़क</option></select>
           </div>
         </div>
-        <p class="hint">Part B (vehicle) can be filled later on the portal if blank now.</p>
+        <p class="hint" id="eway-validity-hint">Validity ≈ 1 day / 200 km (portal rules).</p>
+        <label class="hint" style="display:flex;gap:8px;align-items:center;margin:10px 0">
+          <input type="checkbox" id="eway-ship-diff" /> Ship-to alag hai? / Different delivery address
+        </label>
+        <div class="hidden" id="ship-fields">
+          <div class="field"><label>Ship-to name</label><input id="ship-name" /></div>
+          <div class="field"><label>Ship-to address</label><textarea id="ship-addr" rows="2"></textarea></div>
+          <div class="row">
+            <div class="field"><label>PIN</label><input id="ship-pin" maxlength="6" /></div>
+            <div class="field"><label>State code</label><input id="ship-state" placeholder="09" maxlength="2" /></div>
+          </div>
+        </div>
+        <p class="hint">Transporter ID = Part A assign; Vehicle = Part B. Vehicle baad mein portal pe bhi daal sakte ho.</p>
       </div>
       <div class="footer-actions"><div class="inner">
         <button class="btn btn-ghost" data-go="bill-addless">← Back</button>
@@ -275,6 +288,6 @@
 
   <script src="vendor/jspdf.umd.min.js"></script>
   <script src="vendor/jspdf.plugin.autotable.min.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>

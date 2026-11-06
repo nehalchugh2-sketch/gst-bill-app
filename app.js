@@ -2,7 +2,11 @@
 (function () {
   "use strict";
 
+  const APP_VERSION = "v6";
+
   const STORAGE_KEY = "gstBillApp.v1";
+  const DRAFT_KEY = "gstBillApp.draft.v1";
+  const SCREEN_KEY = "gstBillApp.screen.v1";
   const STATES = {
     "01":"J&K","02":"HP","03":"Punjab","04":"Chandigarh","05":"Uttarakhand","06":"Haryana",
     "07":"Delhi","08":"Rajasthan","09":"UP","10":"Bihar","11":"Sikkim","12":"Arunachal",
@@ -25,7 +29,10 @@
     return {
       seller: {
         gstin: "", legalName: "", tradeName: "", address: "", pin: "", stateCode: "", stateName: "",
-        phone: "", bankName: "", bankAccount: "", bankIfsc: "",
+        phone: "", bankName: "", bankAccount: "", bankIfsc: "", upiId: "",
+        terms: "Goods once sold will not be taken back.",
+        reverseCharge: false,
+        hsnDigits: 4,
         invoicePrefix: "INV/", nextNumber: 1
       },
       settings: {
@@ -69,7 +76,13 @@
       transporterId: null,
       vehicleNo: "",
       distance: 10,
-      transMode: "1"
+      transMode: "1",
+      shipDifferent: false,
+      shipName: "",
+      shipAddress: "",
+      shipPin: "",
+      shipStateCode: "",
+      shipStateName: ""
     };
   }
 
@@ -89,9 +102,16 @@
     return GSTIN_CHARS[cd];
   }
 
+  function normalizeGstin(g) {
+    return String(g || "").toUpperCase().replace(/[^0-9A-Z]/g, "");
+  }
+
   function validateGstin(g) {
     if (!g) return { ok: false, msg: "GSTIN required" };
-    g = String(g).toUpperCase().trim();
+    g = normalizeGstin(g);
+    if (g.length !== 15) {
+      return { ok: false, msg: "GSTIN 15 characters hona chahiye" };
+    }
     if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(g)) {
       return { ok: false, msg: "GSTIN format galat / invalid" };
     }
@@ -481,6 +501,11 @@
     };
   }
 
+  function ewayValidityDays(km) {
+    const d = Math.max(1, Math.ceil((Number(km) || 0) / 200));
+    return d;
+  }
+
   function formatDateDDMMYYYY(d) {
     const dt = d instanceof Date ? d : new Date(d);
     return String(dt.getDate()).padStart(2, "0") + "/" +
@@ -488,8 +513,22 @@
   }
   function nextInvoiceNo() {
     const prefix = store.seller.invoicePrefix || "INV/";
-    const n = store.seller.nextNumber || 1;
-    return { number: prefix + String(n).padStart(4, "0"), next: n + 1 };
+    let n = Math.max(1, Number(store.seller.nextNumber) || 1);
+    const used = new Set((store.bills || []).map((b) => b.invoiceNo));
+    let number = prefix + String(n).padStart(4, "0");
+    while (used.has(number)) {
+      n += 1;
+      number = prefix + String(n).padStart(4, "0");
+    }
+    return { number, next: n + 1 };
+  }
+
+
+  /** jsPDF built-in fonts can't render Devanagari — keep PDF Latin/English-only. */
+  function pdfText(s) {
+    const raw = String(s == null ? "" : s);
+    const stripped = raw.replace(/[\u0900-\u097F]+/g, " ").replace(/[^\x20-\x7E]/g, " ").replace(/\s+/g, " ").trim();
+    return stripped || "-";
   }
 
   /* ---------- PDF ---------- */
@@ -501,13 +540,18 @@
     doc.setFont("helvetica", "bold"); doc.setFontSize(14);
     doc.text("TAX INVOICE", pageW / 2, y, { align: "center" }); y += 6;
     doc.setFont("helvetica", "normal"); doc.setFontSize(9);
-    doc.text("(Under Rule 46 of CGST Rules)", pageW / 2, y, { align: "center" }); y += 8;
+    doc.text("(Under Rule 46 of CGST Rules)", pageW / 2, y, { align: "center" }); y += 4;
+    doc.setFontSize(7); doc.setTextColor(100);
+    doc.text("PDF text is English/Latin only (Hindi UI OK in app)", pageW / 2, y, { align: "center" });
+    doc.setTextColor(0); doc.setFontSize(9); y += 6;
     doc.setFont("helvetica", "bold"); doc.setFontSize(12);
-    doc.text(bill.seller.tradeName || bill.seller.legalName || "Seller", 14, y); y += 5;
+    const _trade = pdfText(bill.seller.tradeName);
+    const _legal = pdfText(bill.seller.legalName);
+    doc.text((_trade !== "-" ? _trade : (_legal !== "-" ? _legal : "Seller")), 14, y); y += 5;
     doc.setFont("helvetica", "normal"); doc.setFontSize(9);
-    [bill.seller.legalName !== bill.seller.tradeName ? bill.seller.legalName : null,
-      bill.seller.address,
-      (bill.seller.stateName || "") + (bill.seller.pin ? " - " + bill.seller.pin : ""),
+    [bill.seller.legalName !== bill.seller.tradeName ? pdfText(bill.seller.legalName) : null,
+      pdfText(bill.seller.address),
+      pdfText((bill.seller.stateName || "") + (bill.seller.pin ? " - " + bill.seller.pin : "")),
       "GSTIN: " + (bill.seller.gstin || ""),
       bill.seller.phone ? "Phone: " + bill.seller.phone : null
     ].filter(Boolean).forEach((t) => { doc.text(String(t), 14, y); y += 4; });
@@ -516,21 +560,29 @@
     doc.setFont("helvetica", "normal");
     doc.text("Date: " + bill.invoiceDate, 120, 33);
     doc.text("Place of Supply: " + (bill.buyerState || "") + " (" + (STATES[bill.buyerState] || "") + ")", 120, 38);
-    doc.text("Reverse Charge: No", 120, 43);
+    doc.text("Reverse Charge: " + (bill.seller.reverseCharge ? "Yes" : "No"), 120, 43);
     y = Math.max(y, 50) + 2;
     doc.setDrawColor(200); doc.line(14, y, pageW - 14, y); y += 6;
     doc.setFont("helvetica", "bold"); doc.text("Bill To / Consignee", 14, y); y += 5;
     doc.setFont("helvetica", "normal");
-    doc.text(bill.buyer.name, 14, y); y += 4;
-    if (bill.buyer.address) { doc.text(bill.buyer.address, 14, y); y += 4; }
-    doc.text((bill.buyer.stateName || "") + (bill.buyer.pin ? " - " + bill.buyer.pin : ""), 14, y); y += 4;
+    doc.text(pdfText(bill.buyer.name), 14, y); y += 4;
+    if (bill.buyer.address) { doc.text(pdfText(bill.buyer.address), 14, y); y += 4; }
+    doc.text(pdfText((bill.buyer.stateName || "") + (bill.buyer.pin ? " - " + bill.buyer.pin : "")), 14, y); y += 4;
     if (bill.buyer.gstin) { doc.text("GSTIN: " + bill.buyer.gstin, 14, y); y += 4; }
+    if (bill.shipDifferent && (bill.shipName || bill.shipAddress)) {
+      y += 2;
+      doc.setFont("helvetica", "bold"); doc.text("Ship To", 14, y); y += 5;
+      doc.setFont("helvetica", "normal");
+      if (bill.shipName) { doc.text(pdfText(bill.shipName), 14, y); y += 4; }
+      if (bill.shipAddress) { doc.text(pdfText(bill.shipAddress), 14, y); y += 4; }
+      doc.text(pdfText((bill.shipStateName || "") + (bill.shipPin ? " - " + bill.shipPin : "")), 14, y); y += 4;
+    }
     y += 4;
     doc.autoTable({
       startY: y,
-      head: [["#", "Description", "HSN", "Qty", "Unit", "Rate", "Taxable", "Tax", "Total"]],
+      head: [["#", "Description", "HSN", "GST%", "Qty", "Unit", "Rate", "Taxable", "Tax", "Total"]],
       body: bill.lines.map((l, i) => [
-        String(i + 1), l.name, String(l.hsn), String(l.qty), l.unit || "PCS",
+        String(i + 1), pdfText(l.name), String(l.hsn), String(l.gstRate), String(l.qty), l.unit || "PCS",
         Number(l.rate).toFixed(2), l.taxable.toFixed(2),
         (bill.interState ? l.igst : l.cgst + l.sgst).toFixed(2), l.lineTotal.toFixed(2)
       ]),
@@ -555,7 +607,7 @@
     right("Grand Total:", "Rs. " + bill.grand.toFixed(2), true);
     y += 2;
     doc.setFont("helvetica", "normal");
-    const words = doc.splitTextToSize("Amount in words: " + bill.amountWords, pageW - 28);
+    const words = doc.splitTextToSize("Amount in words: " + pdfText(bill.amountWords), pageW - 28);
     doc.text(words, 14, y); y += words.length * 4 + 6;
     if (bill.hsnSummary && bill.hsnSummary.length) {
       doc.setFont("helvetica", "bold"); doc.text("HSN Summary (net taxable)", 14, y); y += 2;
@@ -568,14 +620,26 @@
       });
       y = doc.lastAutoTable.finalY + 8;
     }
-    if (bill.seller.bankName) {
-      doc.setFont("helvetica", "bold"); doc.text("Bank Details", 14, y); y += 4;
+    if (bill.seller.bankName || bill.seller.upiId) {
+      doc.setFont("helvetica", "bold"); doc.text("Bank / UPI", 14, y); y += 4;
       doc.setFont("helvetica", "normal");
-      doc.text(bill.seller.bankName + (bill.seller.bankAccount ? " · A/c " + bill.seller.bankAccount : ""), 14, y); y += 4;
+      if (bill.seller.bankName) {
+        doc.text(pdfText(bill.seller.bankName + (bill.seller.bankAccount ? " · A/c " + bill.seller.bankAccount : "")), 14, y); y += 4;
+      }
       if (bill.seller.bankIfsc) { doc.text("IFSC: " + bill.seller.bankIfsc, 14, y); y += 4; }
+      if (bill.seller.upiId) { doc.text("UPI: " + pdfText(bill.seller.upiId), 14, y); y += 4; }
+    }
+    if (bill.seller.terms) {
+      doc.setFont("helvetica", "bold"); doc.text("Terms", 14, y); y += 4;
+      doc.setFont("helvetica", "normal");
+      const terms = doc.splitTextToSize(pdfText(bill.seller.terms), pageW - 28);
+      doc.text(terms, 14, y); y += terms.length * 4 + 2;
     }
     y = Math.max(y + 10, 250);
+    doc.setFont("helvetica", "normal");
     doc.text("Authorized Signatory", pageW - 14, y, { align: "right" });
+    doc.setFontSize(8);
+    doc.text((_trade !== "-" ? _trade : (_legal !== "-" ? _legal : "")), pageW - 14, y + 4, { align: "right" });
     doc.setFontSize(8); doc.setTextColor(100);
     doc.text("GST on net taxable after Add/Less · Taxpayer responsible for correctness", 14, 287);
     doc.setTextColor(0);
@@ -609,10 +673,14 @@
       fromAddr1: (s.address || "").slice(0, 120) || "Address", fromAddr2: "",
       fromPlace: (s.stateName || "Place").slice(0, 50), fromPincode: Number(s.pin) || 0,
       fromStateCode: fromState, actualFromStateCode: fromState,
-      toGstin: b.gstin || "URP", toTrdName: b.name,
-      toAddr1: (b.address || "").slice(0, 120) || "Address", toAddr2: "",
-      toPlace: (b.stateName || "Place").slice(0, 50), toPincode: Number(b.pin) || 0,
-      toStateCode: toState, actualToStateCode: toState,
+      toGstin: b.gstin || "URP",
+      toTrdName: (bill.shipDifferent && bill.shipName) ? bill.shipName : b.name,
+      toAddr1: ((bill.shipDifferent && bill.shipAddress) ? bill.shipAddress : (b.address || "")).slice(0, 120) || "Address",
+      toAddr2: "",
+      toPlace: ((bill.shipDifferent && bill.shipStateName) ? bill.shipStateName : (b.stateName || "Place")).slice(0, 50),
+      toPincode: Number((bill.shipDifferent && bill.shipPin) ? bill.shipPin : b.pin) || 0,
+      toStateCode: Number((bill.shipDifferent && bill.shipStateCode) ? bill.shipStateCode : toState) || toState,
+      actualToStateCode: Number((bill.shipDifferent && bill.shipStateCode) ? bill.shipStateCode : toState) || toState,
       transactionType: 1,
       otherValue: bill.roundOff || 0,
       totalValue: bill.taxable,
@@ -641,10 +709,38 @@
   function $(sel, root) { return (root || document).querySelector(sel); }
   function $all(sel, root) { return Array.from((root || document).querySelectorAll(sel)); }
 
-  function showScreen(name) {
+  const BILL_SCREENS = ["bill-buyer", "bill-items", "bill-qty", "bill-addless", "bill-eway", "bill-confirm", "bill-done"];
+  let currentScreen = "home";
+  let suppressHistory = false;
+
+  function persistDraft() {
+    try {
+      if (BILL_SCREENS.includes(currentScreen) && currentScreen !== "bill-done") {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+        localStorage.setItem(SCREEN_KEY, currentScreen);
+      } else if (currentScreen === "home" || currentScreen === "bill-done") {
+        localStorage.removeItem(DRAFT_KEY);
+        localStorage.removeItem(SCREEN_KEY);
+      }
+    } catch (_) {}
+  }
+
+  function restoreDraftIfAny() {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      const scr = localStorage.getItem(SCREEN_KEY);
+      if (!raw || !scr || !BILL_SCREENS.includes(scr) || scr === "bill-done") return null;
+      draft = Object.assign(emptyDraft(), JSON.parse(raw));
+      return scr;
+    } catch (_) { return null; }
+  }
+
+  function showScreen(name, opts) {
+    opts = opts || {};
     $all(".screen").forEach((el) => el.classList.remove("active"));
     const el = $("#screen-" + name);
     if (el) el.classList.add("active");
+    currentScreen = name;
     if (name === "home") renderHome();
     if (name === "setup") renderSetup();
     if (name === "masters") renderMasters();
@@ -655,7 +751,41 @@
     if (name === "bill-eway") renderEwayStep();
     if (name === "bill-confirm") renderConfirm();
     if (name === "history") renderHistory();
+    persistDraft();
+    if (!opts.fromPop && !suppressHistory) {
+      try {
+        const st = { screen: name };
+        if (opts.replace || name === "home") history.replaceState(st, "", "#/" + name);
+        else history.pushState(st, "", "#/" + name);
+      } catch (_) {}
+    }
   }
+
+  function handleBackNavigation() {
+    // Android back / browser back mid-bill: step back inside the flow, keep draft
+    if (BILL_SCREENS.includes(currentScreen) && currentScreen !== "bill-done") {
+      const idx = BILL_SCREENS.indexOf(currentScreen);
+      if (idx > 0) {
+        showScreen(BILL_SCREENS[idx - 1], { fromPop: true, replace: true });
+        try { history.pushState({ screen: BILL_SCREENS[idx - 1] }, "", "#/" + BILL_SCREENS[idx - 1]); } catch (_) {}
+        return true;
+      }
+      showScreen("home", { fromPop: true, replace: true });
+      return true;
+    }
+    if (currentScreen === "bill-done" || currentScreen === "setup" || currentScreen === "masters" || currentScreen === "history" || currentScreen === "help") {
+      showScreen("home", { fromPop: true, replace: true });
+      return true;
+    }
+    return false; // allow exit from home
+  }
+
+  window.addEventListener("popstate", (e) => {
+    const handled = handleBackNavigation();
+    if (!handled && (!e.state || e.state.screen === "home")) {
+      showScreen("home", { fromPop: true, replace: true });
+    }
+  });
 
   function sellerReady() {
     return !!(store.seller.gstin && store.seller.legalName && store.seller.address && store.seller.pin);
@@ -769,8 +899,13 @@
       opts.statusEl.innerHTML = statusHtml(cls, det.msg + (det.pan ? " · PAN " + det.pan : ""));
     };
     const runSoft = async () => {
+      const cleaned = normalizeGstin(input.value);
+      if (cleaned && cleaned !== input.value.replace(/\s+/g, "").toUpperCase()) {
+        /* keep typing UX; only rewrite when length enough */
+      }
+      if (cleaned.length === 15 && input.value !== cleaned) input.value = cleaned;
       const g = input.value.trim();
-      if (g.length < 15) return;
+      if (normalizeGstin(g).length < 15) return;
       const v = validateGstin(g);
       if (!v.ok) { opts.statusEl.innerHTML = statusHtml("err", v.msg); return; }
       const master = findMasterByGstin(v.gstin);
@@ -779,8 +914,10 @@
       opts.statusEl.innerHTML = statusHtml("offline", "State/PAN OK · Name/Address: Fetch dabayein");
     };
     const runFetch = async () => {
+      const cleaned = normalizeGstin(input.value);
+      if (cleaned) input.value = cleaned;
       const g = input.value.trim();
-      if (!g || g.length < 15) {
+      if (!g || normalizeGstin(g).length < 15) {
         opts.statusEl.innerHTML = statusHtml("err", "Pehle 15-digit GSTIN type karein");
         return;
       }
@@ -853,10 +990,23 @@
         <div class="field"><label>A/c No</label><input id="s-ac" value="${escapeHtml(s.bankAccount)}" /></div>
         <div class="field"><label>IFSC</label><input id="s-ifsc" value="${escapeHtml(s.bankIfsc)}" /></div>
       </div>
+      <div class="field"><label>UPI ID (optional, printed on bill)</label><input id="s-upi" value="${escapeHtml(s.upiId || "")}" placeholder="shop@upi" /></div>
+      <div class="field"><label>Terms (invoice footer)</label><input id="s-terms" value="${escapeHtml(s.terms || "")}" /></div>
+      <div class="row">
+        <div class="field"><label>Reverse Charge</label>
+          <select id="s-rc"><option value="no" ${!s.reverseCharge ? "selected" : ""}>No</option><option value="yes" ${s.reverseCharge ? "selected" : ""}>Yes</option></select>
+        </div>
+        <div class="field"><label>HSN digits (soft check)</label>
+          <select id="s-hsndigits">
+            ${[4,6,8].map((d) => `<option value="${d}" ${(Number(s.hsnDigits) || 4) === d ? "selected" : ""}>${d}</option>`).join("")}
+          </select>
+        </div>
+      </div>
       <div class="row">
         <div class="field"><label>Invoice Prefix</label><input id="s-prefix" value="${escapeHtml(s.invoicePrefix || "INV/")}" /></div>
         <div class="field"><label>Next No</label><input id="s-next" type="number" min="1" value="${Number(s.nextNumber) || 1}" /></div>
       </div>
+      <p class="hint">App version <strong id="setup-ver">${APP_VERSION}</strong></p>
       <hr style="border:none;border-top:1px solid var(--border);margin:16px 0" />
       <h2>GSTIN Lookup (optional API key)</h2>
       <p class="hint">Default free path = Fetch → paste from GST portal (unlimited, no key). Neeche sirf optional trial APIs hain.</p>
@@ -909,6 +1059,10 @@
       bankName: $("#s-bank").value.trim(),
       bankAccount: $("#s-ac").value.trim(),
       bankIfsc: $("#s-ifsc").value.trim().toUpperCase(),
+      upiId: ($("#s-upi") && $("#s-upi").value.trim()) || "",
+      terms: ($("#s-terms") && $("#s-terms").value.trim()) || "",
+      reverseCharge: ($("#s-rc") && $("#s-rc").value === "yes"),
+      hsnDigits: Number(($("#s-hsndigits") && $("#s-hsndigits").value) || 4),
       invoicePrefix: $("#s-prefix").value.trim() || "INV/",
       nextNumber: Math.max(1, Number($("#s-next").value) || 1)
     };
@@ -1007,10 +1161,14 @@
       <div class="field"><label>Item name *</label><input id="if-name" value="${escapeHtml(existing && existing.name || "")}" placeholder="Saree" /></div>
       <div class="row">
         <div class="field"><label>HSN *</label><input id="if-hsn" value="${escapeHtml(existing && existing.hsn || "5407")}" /></div>
-        <div class="field"><label>GST % *</label><input id="if-rate" type="number" step="0.01" value="${existing ? existing.gstRate : 5}" /></div>
+        <div class="field"><label>GST % *</label>
+        <select id="if-rate">
+          ${[0,5,12,18].map((r) => `<option value="${r}" ${(existing ? Number(existing.gstRate) : 5) === r ? "selected" : ""}>${r}%</option>`).join("")}
+        </select>
+      </div>
       </div>
       <div class="field"><label>Unit</label>
-        <select id="if-unit">${["PCS","NOS","MTR","SET","BAG","BOX"].map((u) =>
+        <select id="if-unit">${["PCS","NOS","MTR","KGS","SET","BAG","BOX"].map((u) =>
           `<option ${((existing && existing.unit) || "PCS") === u ? "selected" : ""}>${u}</option>`).join("")}</select>
       </div>
       <p class="error" id="if-err"></p>
@@ -1021,6 +1179,11 @@
       const gstRate = Number($("#if-rate").value);
       const unit = $("#if-unit").value;
       if (!name || !hsn || !(gstRate >= 0)) { $("#if-err").textContent = "Name, HSN, rate required"; return; }
+      const need = Number(store.seller.hsnDigits) || 4;
+      const hsnDigitsOnly = String(hsn).replace(/\D/g, "");
+      if (hsnDigitsOnly.length < need) {
+        $("#if-err").textContent = "HSN kam se kam " + need + " digits (Setup). Abhi save ho jayega — baad mein theek karein.";
+      } else { $("#if-err").textContent = ""; }
       const row = { id: existing ? existing.id : uid(), name, hsn, gstRate, unit };
       if (existing) store.items[store.items.findIndex((x) => x.id === existing.id)] = row;
       else store.items.push(row);
@@ -1191,6 +1354,25 @@
       store.transporters.map((t) => `<option value="${t.id}" ${draft.transporterId === t.id ? "selected" : ""}>${escapeHtml(t.name)}</option>`).join("");
     $("#eway-vehicle").value = draft.vehicleNo || "";
     $("#eway-distance").value = draft.distance || 10;
+    const hint = $("#eway-validity-hint");
+    if (hint) {
+      const days = ewayValidityDays(draft.distance || $("#eway-distance").value);
+      hint.textContent = "Approx e-way validity: " + days + " day(s) (≈1 day per 200 km). Portal final karega.";
+    }
+    const shipCb = $("#eway-ship-diff");
+    const shipFields = $("#ship-fields");
+    if (shipCb && shipFields) {
+      shipCb.checked = !!draft.shipDifferent;
+      shipFields.classList.toggle("hidden", !draft.shipDifferent);
+      shipCb.onchange = () => {
+        draft.shipDifferent = shipCb.checked;
+        shipFields.classList.toggle("hidden", !shipCb.checked);
+      };
+      if ($("#ship-name")) $("#ship-name").value = draft.shipName || "";
+      if ($("#ship-addr")) $("#ship-addr").value = draft.shipAddress || "";
+      if ($("#ship-pin")) $("#ship-pin").value = draft.shipPin || "";
+      if ($("#ship-state")) $("#ship-state").value = draft.shipStateCode || "";
+    }
     $("#btn-eway-next").disabled = draft.wantEway === null;
   }
 
@@ -1203,7 +1385,9 @@
       <dt>Add / Less</dt><dd>${(c.addLessRows.length ? c.addLessRows.map((r) => (r.kind === "less" ? "− " : "+ ") + escapeHtml(r.label) + " ₹" + r.amount.toFixed(2)).join("<br/>") : "—")}</dd>
       <dt>Net Taxable</dt><dd>₹ ${c.taxable.toFixed(2)}</dd>
       <dt>Tax</dt><dd>${c.interState ? "IGST" : "CGST + SGST"}</dd>
-      <dt>E-Way</dt><dd>${draft.wantEway ? ("YES · " + escapeHtml(tr ? tr.name : "—") + " · " + escapeHtml(draft.vehicleNo || "vehicle later")) : "NO"}</dd>
+      <dt>E-Way</dt><dd>${draft.wantEway ? ("YES · " + escapeHtml(tr ? tr.name : "—") + " · " + escapeHtml(draft.vehicleNo || "vehicle later") + " · " + (draft.distance || 0) + " km ≈ " + ewayValidityDays(draft.distance) + " day(s)") : "NO"}</dd>
+      <dt>Ship To</dt><dd>${draft.shipDifferent ? escapeHtml((draft.shipName || "") + " · " + (draft.shipPin || "")) : "Same as Bill To"}</dd>
+      <dt>Reverse Charge</dt><dd>${store.seller.reverseCharge ? "Yes" : "No"}</dd>
       <dt>Amount in words</dt><dd>${escapeHtml(c.amountWords)}</dd>`;
     paintLiveTotals("#confirm-totals");
   }
@@ -1220,7 +1404,13 @@
       transporterId: draft.transporterId,
       vehicleNo: (draft.vehicleNo || "").replace(/\s+/g, "").toUpperCase(),
       distance: Number(draft.distance) || 0,
-      transMode: draft.transMode || "1"
+      transMode: draft.transMode || "1",
+      shipDifferent: !!draft.shipDifferent,
+      shipName: draft.shipName || "",
+      shipAddress: draft.shipAddress || "",
+      shipPin: draft.shipPin || "",
+      shipStateCode: draft.shipStateCode || "",
+      shipStateName: draft.shipStateName || ""
     });
     const doc = buildPdf(bill);
     const pdfB = doc.output("blob");
@@ -1246,13 +1436,15 @@
   }
   async function sharePdf() {
     if (!lastBill) return;
-    const file = new File([lastBill.pdfBlob], lastBill.bill.invoiceNo.replace(/\//g, "-") + ".pdf", { type: "application/pdf" });
-    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    const fname = lastBill.bill.invoiceNo.replace(/\//g, "-") + ".pdf";
+    const file = new File([lastBill.pdfBlob], fname, { type: "application/pdf" });
+    const canFiles = !!(navigator.share && navigator.canShare && (() => { try { return navigator.canShare({ files: [file] }); } catch (_) { return false; } })());
+    if (canFiles) {
       try { await navigator.share({ files: [file], title: "Tax Invoice " + lastBill.bill.invoiceNo, text: "GST Tax Invoice " + lastBill.bill.invoiceNo }); return; }
-      catch (e) {}
+      catch (e) { /* user cancel or fail → fall through */ }
     }
     downloadPdf();
-    alert("Share not available — PDF downloaded. WhatsApp pe attach karein.");
+    alert("Share not available — PDF downloaded (" + fname + "). WhatsApp pe attach karein.");
   }
   function downloadJson() {
     if (!lastBill || !lastBill.ewayJson) return;
@@ -1293,7 +1485,7 @@
     store.seller = {
       gstin: "09AAAAA0000A1Z0", legalName: "Demo Textiles Private Limited", tradeName: "Shree Silk House",
       address: "Chowk, Varanasi, Uttar Pradesh", pin: "221001", stateCode: "09", stateName: "UP",
-      phone: "9999999999", bankName: "Demo Bank", bankAccount: "1234567890", bankIfsc: "DEMO0001234",
+      phone: "9999999999", bankName: "Demo Bank", bankAccount: "1234567890", bankIfsc: "DEMO0001234", upiId: "shreesilk@upi", terms: "Goods once sold will not be taken back.", reverseCharge: false, hsnDigits: 4,
       invoicePrefix: "INV/", nextNumber: 1
     };
     store.settings = { gstLookupProvider: "offline", gstLookupKey: "" };
@@ -1352,7 +1544,11 @@
   $("#eway-no").onclick = () => { draft.wantEway = false; renderEwayStep(); };
   $("#eway-transporter").onchange = (e) => { draft.transporterId = e.target.value || null; };
   $("#eway-vehicle").oninput = (e) => { draft.vehicleNo = e.target.value; };
-  $("#eway-distance").oninput = (e) => { draft.distance = Number(e.target.value) || 0; };
+  $("#eway-distance").oninput = (e) => {
+    draft.distance = Number(e.target.value) || 0;
+    const hint = $("#eway-validity-hint");
+    if (hint) hint.textContent = "Approx e-way validity: " + ewayValidityDays(draft.distance) + " day(s) (≈1 day per 200 km). Portal final karega.";
+  };
   $("#btn-add-transporter-inline").onclick = () => {
     const card = $("#transporter-form-card");
     showTransporterForm(card, null, (row) => {
@@ -1365,6 +1561,18 @@
       draft.vehicleNo = $("#eway-vehicle").value;
       draft.distance = Number($("#eway-distance").value) || 0;
       draft.transMode = $("#eway-mode").value || "1";
+      const shipEl = $("#eway-ship-diff"); draft.shipDifferent = !!(shipEl && shipEl.checked);
+      if (draft.shipDifferent) {
+        draft.shipName = ($("#ship-name") && $("#ship-name").value.trim()) || "";
+        draft.shipAddress = ($("#ship-addr") && $("#ship-addr").value.trim()) || "";
+        draft.shipPin = ($("#ship-pin") && $("#ship-pin").value.trim()) || "";
+        draft.shipStateCode = ($("#ship-state") && $("#ship-state").value.trim()) || "";
+        draft.shipStateName = STATES[draft.shipStateCode] || "";
+        if (draft.shipPin && !/^\d{6}$/.test(draft.shipPin)) {
+          alert("Ship-to PIN 6 digits hona chahiye");
+          return;
+        }
+      }
     }
     showScreen("bill-confirm");
   };
@@ -1376,17 +1584,68 @@
     chip.onclick = () => { masterTab = chip.dataset.master; renderMasters(); };
   });
 
+  function paintAppVersion() {
+    const el = document.getElementById("gst-app-version");
+    if (el) el.textContent = APP_VERSION;
+  }
+  paintAppVersion();
+
   if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => { navigator.serviceWorker.register("./sw.js").catch(() => {}); });
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (refreshing) return;
+      refreshing = true;
+      // One auto-reload when the new SW takes control (v5+)
+      window.location.reload();
+    });
+
+    const registerAndCheck = () => {
+      navigator.serviceWorker
+        .register("./sw.js", { updateViaCache: "none" })
+        .then((reg) => {
+          try { reg.update(); } catch (_) {}
+          // If a waiting worker already exists, activate it
+          if (reg.waiting) {
+            reg.waiting.postMessage({ type: "SKIP_WAITING" });
+          }
+          reg.addEventListener("updatefound", () => {
+            const nw = reg.installing;
+            if (!nw) return;
+            nw.addEventListener("statechange", () => {
+              if (nw.state === "installed" && navigator.serviceWorker.controller) {
+                nw.postMessage({ type: "SKIP_WAITING" });
+              }
+            });
+          });
+        })
+        .catch(() => {});
+    };
+
+    if (document.readyState === "complete") registerAndCheck();
+    else window.addEventListener("load", registerAndCheck);
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") {
+        navigator.serviceWorker.getRegistration().then((reg) => {
+          if (reg) try { reg.update(); } catch (_) {}
+        });
+      }
+    });
   }
 
   window.__gstBill = {
-    seedDemo, validateGstin, amountInWords, resolveGstinDetails, offlineFromGstin, parsePortalText,
+    APP_VERSION, seedDemo, validateGstin, normalizeGstin, amountInWords, resolveGstinDetails, offlineFromGstin, parsePortalText,
     getStore: () => store, setStore: (s) => { store = s; save(); },
-    computeBill: () => computeBill(draft), getDraft: () => draft, setDraft: (d) => { draft = Object.assign(emptyDraft(), d); },
-    buildEwayJson, buildPdf, showScreen, startBill, generateBill, getLastBill: () => lastBill,
-    round2
+    computeBill: () => computeBill(draft), getDraft: () => draft, setDraft: (d) => { draft = Object.assign(emptyDraft(), d); persistDraft(); },
+    buildEwayJson, buildPdf, pdfText, showScreen, startBill, generateBill, getLastBill: () => lastBill,
+    nextInvoiceNo, handleBackNavigation, getCurrentScreen: () => currentScreen, persistDraft, restoreDraftIfAny,
+    downloadPdf, sharePdf, downloadJson, backupStore, restoreStore, round2
   };
 
-  renderHome();
+  const resume = restoreDraftIfAny();
+  if (resume && sellerReady()) showScreen(resume, { replace: true });
+  else {
+    renderHome();
+    try { history.replaceState({ screen: "home" }, "", "#/home"); } catch (_) {}
+  }
 })();
