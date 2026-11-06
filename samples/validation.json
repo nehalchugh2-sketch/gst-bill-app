@@ -1,37 +1,161 @@
 {
+  "checklist": [
+    {
+      "name": "Fetch never silent + helper opens",
+      "ok": true,
+      "detail": "State/PAN bhar diya. Name/Address: neeche paste karein (free, unlimited)."
+    },
+    {
+      "name": "Offline state filled",
+      "ok": true,
+      "detail": "09 - UP"
+    },
+    {
+      "name": "Paste fills legal/trade/address/pin",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Seller save",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Seller edit",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Buyer fetch helper",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Buyer save editable fields",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Unregistered buyer (no GSTIN)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Item save HSN/rate",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Transporter fetch+save",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "GST on net intra CGST+SGST",
+      "ok": true,
+      "detail": "{\"taxable\":14500,\"cgst\":362.5,\"sgst\":362.5,\"igst\":0,\"grand\":15225,\"words\":\"Fifteen Thousand Two Hundred Twenty Five Rupees Only\",\"inter\":false}"
+    },
+    {
+      "name": "Amount in words",
+      "ok": true,
+      "detail": "Fifteen Thousand Two Hundred Twenty Five Rupees Only"
+    },
+    {
+      "name": "E-way optional note below 50k",
+      "ok": true,
+      "detail": "₹15225 ≤ 50,000E-way bill optional — Yes / No."
+    },
+    {
+      "name": "PDF download",
+      "ok": true,
+      "detail": "INV-0001.pdf"
+    },
+    {
+      "name": "E-way JSON net values",
+      "ok": true,
+      "detail": "1.0.0621"
+    },
+    {
+      "name": "E-way JSON fields",
+      "ok": true,
+      "detail": "{\"tv\":14500,\"cg\":362.5,\"dist\":\"25\"}"
+    },
+    {
+      "name": "Invoice number increments",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Share button present",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Done screen OK",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Bill list",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Repeat last bill opens qty",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Backup download",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Inter-state IGST on net",
+      "ok": true,
+      "detail": "{\"inter\":true,\"igst\":725,\"cgst\":0,\"taxable\":14500,\"grand\":15225}"
+    },
+    {
+      "name": "E-way default Yes above 50k",
+      "ok": true,
+      "detail": "₹157500 > 50,000 — E-way bill zaroori (Rule 138)Default YES."
+    },
+    {
+      "name": "parsePortalText",
+      "ok": true,
+      "detail": "{\"ok\":true,\"source\":\"paste\",\"gstin\":\"07AAAAA0000A1Z5\",\"legalName\":\"ABC\",\"tradeName\":\"ABC Trade\",\"address\":\"Street 1, Delhi - 110001\",\"pin\":\"110001\",\"stateCode\":\"07\",\"stateName\":\"Delhi\",\"pan\":\"\",\"msg\":\"Paste se bhari — please check / जाँच लें (editable)\"}"
+    },
+    {
+      "name": "Service worker registerable",
+      "ok": true,
+      "detail": "registered"
+    },
+    {
+      "name": "SW cache gst-bill-v4",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "No page console errors",
+      "ok": true,
+      "detail": ""
+    }
+  ],
   "intra": {
-    "itemsGross": true,
-    "taxable": true,
-    "cgst": true,
-    "sgst": true,
-    "grand": true,
-    "jsonTaxable": true,
-    "jsonCgst": true,
-    "jsonSgst": true,
-    "jsonTot": true
-  },
-  "mid": {
     "taxable": 14500,
     "cgst": 362.5,
     "sgst": 362.5,
     "igst": 0,
     "grand": 15225,
-    "itemsGross": 15000
+    "words": "Fifteen Thousand Two Hundred Twenty Five Rupees Only",
+    "inter": false
   },
   "inter": {
-    "interState": true,
-    "taxable": 14500,
+    "inter": true,
     "igst": 725,
     "cgst": 0,
-    "sgst": 0,
+    "taxable": 14500,
     "grand": 15225
-  },
-  "off": {
-    "ok": true,
-    "source": "master-buyer",
-    "state": "09",
-    "pan": "BBBBB0000B",
-    "name": "Jyoti Krishna Saree Centre"
   },
   "json": {
     "version": "1.0.0621",
@@ -45,8 +169,8 @@
         "docNo": "INV/0001",
         "docDate": "06/11/2026",
         "fromGstin": "09AAAAA0000A1Z0",
-        "fromTrdName": "Shree Silk House",
-        "fromAddr1": "Chowk, Varanasi, Uttar Pradesh",
+        "fromTrdName": "Shree Silk House Edited",
+        "fromAddr1": "Chowk, Varanasi, Uttar Pradesh - 221001",
         "fromAddr2": "",
         "fromPlace": "UP",
         "fromPincode": 221001,
@@ -54,7 +178,7 @@
         "actualFromStateCode": 9,
         "toGstin": "09BBBBB0000B1ZR",
         "toTrdName": "Jyoti Krishna Saree Centre",
-        "toAddr1": "Lanka, Varanasi, Uttar Pradesh",
+        "toAddr1": "Lanka, Varanasi - 221005",
         "toAddr2": "",
         "toPlace": "UP",
         "toPincode": 221005,

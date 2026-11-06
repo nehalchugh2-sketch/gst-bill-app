@@ -18,14 +18,14 @@ python3 -m http.server 8765
 GitHub Pages / Cloudflare Pages. Live example: https://nehalchugh2-sketch.github.io/gst-bill-app/
 
 ## GSTIN lookup (honest limits)
-| Provider | Free | CORS from browser | Notes |
-|----------|------|-------------------|-------|
-| Offline (built-in) | Unlimited | n/a | State, PAN, checksum; master reuse |
-| [Appyflow](https://appyflow.in/verify-gst/) | **50** one-time trial | Yes (reflects Origin) | `key_secret` in query; then ~₹0.40–0.50/call |
-| [gstincheck.co.in](https://gstincheck.co.in/) | **20** free | Yes (`*`) | Key in URL path |
-| gstinapi.in | ~75 credits | **No** (no CORS) | Not usable from static PWA without a proxy |
+| Path | Free | Works from GitHub Pages? | Notes |
+|------|------|--------------------------|-------|
+| **Fetch → paste** (default) | Unlimited | Yes | GST portal has captcha; **CORS blocks** in-app API/captcha calls. App copies GSTIN, opens Search Taxpayer, user pastes result → auto-fill |
+| Offline decode | Unlimited | Yes | State, PAN, checksum; saved masters fill instantly |
+| Appyflow / gstincheck | 50 / 20 trial | Yes | Optional key in Setup only |
+| Direct portal API in-app | — | **No** | No `Access-Control-Allow-Origin`; captcha cookie HttpOnly |
 
-Never hardcode a paid secret — paste key only in Setup (stored in phone `localStorage`).
+No free unlimited live name/address API without a key was found (checked 2026). Never hardcode secrets.
 
 ## E-way JSON upload
 ewaybillgst.gov.in → e-Waybill → Generate Bulk. Schema tools: https://docs.ewaybillgst.gov.in/html/formatdownloadnew.html

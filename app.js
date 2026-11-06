@@ -201,6 +201,112 @@
     };
   }
 
+
+  function parsePortalText(text, gstinHint) {
+    const raw = String(text || "").replace(/\r/g, "\n");
+    if (!raw.trim()) return { ok: false, msg: "Paste khali hai — portal se details copy karke yahan chipkayein" };
+    const pick = (...labels) => {
+      for (const lab of labels) {
+        const re = new RegExp(lab + "\\s*[:\\-–]?\\s*([^\\n]+)", "i");
+        const m = raw.match(re);
+        if (m && m[1].trim()) return m[1].replace(/\s+/g, " ").trim();
+      }
+      return "";
+    };
+    let legalName = pick("Legal Name of Business", "Legal Name", "lgnm", "Taxpayer Name", "Name of Business");
+    let tradeName = pick("Trade Name", "tradeNam", "Trade name");
+    let address = pick(
+      "Principal Place of Business", "Principal Place Of Business",
+      "Address", "pradr", "Place of Business"
+    );
+    // Sometimes address spans lines after label
+    if (!address) {
+      const m = raw.match(/Principal Place of Business\s*[:\-]?\s*([\s\S]{10,220}?)(?:\n\s*\n|Nature of Business|Date of|Status|GSTIN|$)/i);
+      if (m) address = m[1].replace(/\s+/g, " ").trim();
+    }
+    let pin = "";
+    const pinM = (address + "\n" + raw).match(/\b([1-9][0-9]{5})\b/);
+    if (pinM) pin = pinM[1];
+    let gstin = (gstinHint || "").toUpperCase();
+    const gM = raw.toUpperCase().match(/\b([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z])\b/);
+    if (gM) gstin = gM[1];
+    if (!legalName && !tradeName && !address) {
+      // loose: first long line as name
+      const lines = raw.split("\n").map((l) => l.trim()).filter((l) => l.length > 3 && !/captcha|search|gstin\/uin/i.test(l));
+      if (lines[0] && lines[0].length < 80) legalName = lines[0];
+      if (!address && lines.length > 1) address = lines.slice(1).join(", ").slice(0, 200);
+    }
+    if (!legalName && !tradeName && !address) {
+      return { ok: false, msg: "Samajh nahi aaya — Legal Name / Address wala text paste karein" };
+    }
+    const v = gstin ? validateGstin(gstin) : { ok: false };
+    const stateCode = v.ok ? v.stateCode : (gstinHint || "").slice(0, 2);
+    return {
+      ok: true,
+      source: "paste",
+      gstin: v.ok ? v.gstin : (gstinHint || "").toUpperCase(),
+      legalName: legalName || tradeName,
+      tradeName: tradeName || legalName,
+      address: address || "",
+      pin: pin || "",
+      stateCode: stateCode || "",
+      stateName: STATES[stateCode] || "",
+      pan: v.ok ? v.pan : "",
+      msg: "Paste se bhari — please check / जाँच लें (editable)"
+    };
+  }
+
+  function openFetchHelper(opts) {
+    // opts: { panelEl, gstin, onApply, statusEl }
+    const g = String(opts.gstin || "").toUpperCase().trim();
+    const panel = opts.panelEl;
+    if (!panel) return;
+    panel.classList.remove("hidden");
+    panel.innerHTML = `
+      <div class="fetch-box">
+        <strong>Free unlimited fetch (no API key)</strong>
+        <p class="hint" style="margin:6px 0">Government GST site browser se seedha API allow nahi karti (CORS block). Isliye 2 simple steps:</p>
+        <ol class="fetch-steps">
+          <li><button type="button" class="btn btn-secondary btn-sm" id="fh-copy">1. Copy GSTIN</button></li>
+          <li><button type="button" class="btn btn-secondary btn-sm" id="fh-open">2. Open GST Search</button> → Search → result select/copy</li>
+          <li>Neeche paste karein → <strong>Fill</strong></li>
+        </ol>
+        <textarea id="fh-paste" rows="4" placeholder="Portal se Legal Name, Trade Name, Address yahan paste…"></textarea>
+        <div class="row" style="margin-top:8px">
+          <button type="button" class="btn btn-ok" id="fh-fill">Fill from paste / भरें</button>
+          <button type="button" class="btn btn-ghost" id="fh-close">Close</button>
+        </div>
+        <p class="hint" style="margin-top:8px">Optional paid/trial API keys Setup ke neeche hain — zaroori nahi.</p>
+      </div>`;
+    const copyBtn = panel.querySelector("#fh-copy");
+    const openBtn = panel.querySelector("#fh-open");
+    const fillBtn = panel.querySelector("#fh-fill");
+    const closeBtn = panel.querySelector("#fh-close");
+    copyBtn.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(g);
+        if (opts.statusEl) opts.statusEl.innerHTML = statusHtml("ok", "GSTIN copy ho gaya ✓");
+      } catch (e) {
+        if (opts.statusEl) opts.statusEl.innerHTML = statusHtml("offline", "Copy: " + g + " (manual select)");
+      }
+    };
+    openBtn.onclick = () => {
+      window.open("https://services.gst.gov.in/services/searchtp", "_blank", "noopener");
+    };
+    fillBtn.onclick = () => {
+      const parsed = parsePortalText(panel.querySelector("#fh-paste").value, g);
+      if (!parsed.ok) {
+        if (opts.statusEl) opts.statusEl.innerHTML = statusHtml("err", parsed.msg);
+        return;
+      }
+      opts.onApply(parsed);
+      if (opts.statusEl) opts.statusEl.innerHTML = statusHtml("ok", parsed.msg);
+      panel.classList.add("hidden");
+      panel.innerHTML = "";
+    };
+    closeBtn.onclick = () => { panel.classList.add("hidden"); panel.innerHTML = ""; };
+  }
+
   async function lookupGstinOnline(gstin) {
     const provider = (store.settings && store.settings.gstLookupProvider) || "offline";
     const key = (store.settings && store.settings.gstLookupKey || "").trim();
@@ -565,32 +671,161 @@
       card.innerHTML = "<h2>Pehle Setup / First setup</h2><p class='hint'>Apna GSTIN aur shop details daalein.</p>" +
         "<button class='btn btn-primary btn-block' data-go='setup'>Open Setup</button>";
     } else {
+      const last = store.bills[0];
       card.innerHTML = "<div class='pill ok'>Ready</div><h2 style='margin-top:8px'>" +
         escapeHtml(store.seller.tradeName || store.seller.legalName) +
         "</h2><p class='hint' style='margin:0'>GSTIN " + escapeHtml(store.seller.gstin) +
-        " · Next " + escapeHtml((store.seller.invoicePrefix || "INV/") + String(store.seller.nextNumber || 1).padStart(4, "0")) + "</p>";
+        " · Next " + escapeHtml((store.seller.invoicePrefix || "INV/") + String(store.seller.nextNumber || 1).padStart(4, "0")) + "</p>" +
+        (last ? "<button class='btn btn-secondary btn-block' id='btn-repeat-last' style='margin-top:10px'>Repeat last bill / पिछला दोहराएँ<br/><span style='font-weight:500;font-size:0.8rem'>" +
+          escapeHtml(last.buyerName) + " · ₹" + Number(last.grand).toFixed(0) + "</span></button>" : "") +
+        "<div class='row' style='margin-top:10px'><button class='btn btn-ghost' id='btn-backup'>Backup</button><button class='btn btn-ghost' id='btn-restore'>Restore</button></div>" +
+        "<input type='file' id='restore-file' accept='application/json,.json' class='hidden' />";
+      const rep = $("#btn-repeat-last");
+      if (rep) rep.onclick = () => repeatLastBill();
+      const bak = $("#btn-backup");
+      if (bak) bak.onclick = () => backupStore();
+      const rst = $("#btn-restore");
+      const file = $("#restore-file");
+      if (rst && file) {
+        rst.onclick = () => file.click();
+        file.onchange = () => restoreStore(file.files && file.files[0]);
+      }
+    }
+  }
+
+  function repeatLastBill() {
+    const last = store.bills[0];
+    if (!last || !last.snapshot) return;
+    const snap = last.snapshot;
+    if (!sellerReady()) { showScreen("setup"); return; }
+    draft = emptyDraft();
+    const matchBuyer = store.buyers.find((b) => {
+      if (snap.buyer && snap.buyer.gstin && b.gstin && b.gstin === snap.buyer.gstin) return true;
+      if (snap.buyer && b.name === snap.buyer.name) return true;
+      if (snap.buyerName && b.name === snap.buyerName) return true;
+      return false;
+    });
+    draft.buyerId = matchBuyer ? matchBuyer.id : null;
+    if (!draft.buyerId && snap.buyer) {
+      // ensure buyer exists
+      const b = {
+        id: uid(), name: snap.buyer.name, gstin: snap.buyer.gstin || "",
+        address: snap.buyer.address || "", pin: snap.buyer.pin || "",
+        stateCode: snap.buyer.stateCode || "", stateName: snap.buyer.stateName || ""
+      };
+      store.buyers.unshift(b); save();
+      draft.buyerId = b.id;
+    }
+    draft.lines = (snap.lines || []).map((l) => ({
+      itemId: l.itemId || uid(), name: l.name, hsn: l.hsn, gstRate: l.gstRate, unit: l.unit || "PCS",
+      qty: l.qty, rate: l.rate
+    }));
+    // ensure items in master
+    draft.lines.forEach((l) => {
+      if (!store.items.some((it) => it.name === l.name && it.hsn === l.hsn)) {
+        store.items.push({ id: l.itemId || uid(), name: l.name, hsn: l.hsn, gstRate: l.gstRate, unit: l.unit || "PCS" });
+      }
+    });
+    draft.addLess = (snap.addLessRows || []).map((r) => ({
+      id: uid(), kind: r.kind, label: r.label, mode: "amount", value: r.amount
+    }));
+    draft.wantEway = null;
+    draft.transporterId = snap.transporterId || null;
+    draft.vehicleNo = snap.vehicleNo || "";
+    draft.distance = snap.distance || 10;
+    save();
+    showScreen("bill-qty");
+    renderQtyStep();
+  }
+
+  function backupStore() {
+    const blob = new Blob([JSON.stringify(store, null, 2)], { type: "application/json" });
+    downloadBlob(blob, "gst-bill-backup.json");
+  }
+
+  async function restoreStore(file) {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!data || !data.seller) throw new Error("Invalid backup");
+      store = Object.assign(defaultStore(), data);
+      store.seller = Object.assign(defaultStore().seller, data.seller || {});
+      store.settings = Object.assign(defaultStore().settings, data.settings || {});
+      save();
+      renderHome();
+      alert("Backup restore ho gaya ✓");
+    } catch (e) {
+      alert("Restore fail: " + (e.message || e));
     }
   }
 
   function wireGstinField(opts) {
-    // opts: { input, statusEl, onApply(details), fields: {legal, trade, address, pin, state} }
+    // opts: { input, statusEl, onApply, fetchBtn, helperPanel }
     const input = opts.input;
-    const run = async (forceOnline) => {
-      const g = input.value.trim();
-      if (g.length < 15) return;
-      opts.statusEl.innerHTML = statusHtml("loading", "Checking…");
-      const det = await resolveGstinDetails(g, { forceOnline: !!forceOnline });
-      if (!det.ok) {
-        opts.statusEl.innerHTML = statusHtml("err", det.msg);
-        return;
-      }
+    const applyDet = (det) => {
       opts.onApply(det);
-      const cls = det.source === "offline" || det.fetchError ? "offline" : "ok";
+      const cls = (det.source === "offline" || det.fetchError) ? "offline" : "ok";
       opts.statusEl.innerHTML = statusHtml(cls, det.msg + (det.pan ? " · PAN " + det.pan : ""));
     };
-    input.addEventListener("change", () => run(false));
-    input.addEventListener("blur", () => { if (input.value.trim().length === 15) run(false); });
-    if (opts.fetchBtn) opts.fetchBtn.onclick = () => run(true);
+    const runSoft = async () => {
+      const g = input.value.trim();
+      if (g.length < 15) return;
+      const v = validateGstin(g);
+      if (!v.ok) { opts.statusEl.innerHTML = statusHtml("err", v.msg); return; }
+      const master = findMasterByGstin(v.gstin);
+      if (master) { applyDet(master); return; }
+      opts.onApply({ stateCode: v.stateCode, stateName: v.stateName, pan: v.pan });
+      opts.statusEl.innerHTML = statusHtml("offline", "State/PAN OK · Name/Address: Fetch dabayein");
+    };
+    const runFetch = async () => {
+      const g = input.value.trim();
+      if (!g || g.length < 15) {
+        opts.statusEl.innerHTML = statusHtml("err", "Pehle 15-digit GSTIN type karein");
+        return;
+      }
+      opts.statusEl.innerHTML = statusHtml("loading", "Checking…");
+      const v = validateGstin(g);
+      if (!v.ok) { opts.statusEl.innerHTML = statusHtml("err", v.msg); return; }
+
+      // 1) master hit
+      const master = findMasterByGstin(v.gstin);
+      if (master) {
+        applyDet(master);
+        return;
+      }
+
+      // 2) optional API key path
+      const provider = (store.settings && store.settings.gstLookupProvider) || "offline";
+      const key = (store.settings && store.settings.gstLookupKey || "").trim();
+      if (provider !== "offline" && key) {
+        const online = await lookupGstinOnline(v.gstin);
+        if (online.ok) { applyDet(online); return; }
+        opts.statusEl.innerHTML = statusHtml("err", "API fail: " + online.msg);
+      }
+
+      // 3) always apply offline state/PAN so Fetch never "does nothing"
+      const off = offlineFromGstin(v.gstin);
+      opts.onApply({ stateCode: off.stateCode, stateName: off.stateName, pan: off.pan, legalName: "", tradeName: "", address: "", pin: "" });
+      opts.statusEl.innerHTML = statusHtml("offline", "State/PAN bhar diya. Name/Address: neeche paste karein (free, unlimited).");
+      if (opts.helperPanel) {
+        openFetchHelper({
+          panelEl: opts.helperPanel,
+          gstin: v.gstin,
+          statusEl: opts.statusEl,
+          onApply: (det) => applyDet(det)
+        });
+      }
+    };
+    input.addEventListener("change", () => { runSoft(); });
+    // no blur soft-fill — it races with Fetch click and overwrites the helper UX
+    if (opts.fetchBtn) {
+      opts.fetchBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        runFetch();
+      });
+    }
   }
 
   function renderSetup() {
@@ -603,6 +838,7 @@
       </div>
       <div id="s-status"></div>
       <button type="button" class="btn btn-secondary btn-block" id="s-fetch" style="margin-bottom:10px">Fetch details / डिटेल्स लाओ</button>
+      <div id="s-fetch-helper" class="hidden"></div>
       <p class="pan-hint" id="s-pan"></p>
       <div class="field"><label>Legal Name *</label><input id="s-legal" value="${escapeHtml(s.legalName)}" /></div>
       <div class="field"><label>Trade Name</label><input id="s-trade" value="${escapeHtml(s.tradeName)}" /></div>
@@ -622,8 +858,8 @@
         <div class="field"><label>Next No</label><input id="s-next" type="number" min="1" value="${Number(s.nextNumber) || 1}" /></div>
       </div>
       <hr style="border:none;border-top:1px solid var(--border);margin:16px 0" />
-      <h2>GSTIN Lookup (optional)</h2>
-      <p class="hint">Offline hamesha kaam karta hai (state/PAN/checksum). Online ke liye free API key Settings mein — phone pe save, kabhi code mein hardcode nahi.</p>
+      <h2>GSTIN Lookup (optional API key)</h2>
+      <p class="hint">Default free path = Fetch → paste from GST portal (unlimited, no key). Neeche sirf optional trial APIs hain.</p>
       <div class="field"><label>Provider</label>
         <select id="s-provider">
           <option value="offline" ${set.gstLookupProvider === "offline" ? "selected" : ""}>Offline only (free, no key)</option>
@@ -641,12 +877,12 @@
       if (det.tradeName) $("#s-trade").value = det.tradeName;
       if (det.address) $("#s-addr").value = det.address;
       if (det.pin) $("#s-pin").value = det.pin;
-      $("#s-state").value = (det.stateCode || "") + (det.stateName ? " - " + det.stateName : "");
-      $("#s-pan").textContent = det.pan ? "PAN: " + det.pan : "";
+      if (det.stateCode || det.stateName) $("#s-state").value = (det.stateCode || "") + (det.stateName ? " - " + det.stateName : "");
+      if (det.pan) $("#s-pan").textContent = "PAN: " + det.pan;
     };
     wireGstinField({
       input: $("#s-gstin"), statusEl: $("#s-status"), fetchBtn: $("#s-fetch"),
-      onApply: apply
+      helperPanel: $("#s-fetch-helper"), onApply: apply
     });
   }
 
@@ -719,6 +955,7 @@
         <input id="bf-gstin" maxlength="15" value="${escapeHtml(existing && existing.gstin || "")}" autocomplete="off" /></div>
       <div id="bf-status"></div>
       <button type="button" class="btn btn-secondary btn-block" id="bf-fetch" style="margin-bottom:8px">Fetch / डिटेल्स लाओ</button>
+      <div id="bf-fetch-helper" class="hidden"></div>
       <p class="pan-hint" id="bf-pan"></p>
       <div class="field"><label>Name *</label><input id="bf-name" value="${escapeHtml(existing && existing.name || "")}" /></div>
       <div class="field"><label>Address *</label><textarea id="bf-addr" rows="2">${escapeHtml(existing && existing.address || "")}</textarea></div>
@@ -730,12 +967,13 @@
       <button class="btn btn-primary btn-block" id="bf-save">Save buyer</button>`;
     wireGstinField({
       input: $("#bf-gstin"), statusEl: $("#bf-status"), fetchBtn: $("#bf-fetch"),
+      helperPanel: $("#bf-fetch-helper"),
       onApply: (det) => {
         if (det.legalName || det.tradeName) $("#bf-name").value = det.tradeName || det.legalName;
         if (det.address) $("#bf-addr").value = det.address;
         if (det.pin) $("#bf-pin").value = det.pin;
-        $("#bf-state").value = (det.stateCode || "") + (det.stateName ? " - " + det.stateName : "");
-        $("#bf-pan").textContent = det.pan ? "PAN: " + det.pan : "";
+        if (det.stateCode || det.stateName) $("#bf-state").value = (det.stateCode || "") + (det.stateName ? " - " + det.stateName : "");
+        if (det.pan) $("#bf-pan").textContent = "PAN: " + det.pan;
       }
     });
     $("#bf-save").onclick = () => {
@@ -798,11 +1036,13 @@
         <input id="tf-id" value="${escapeHtml(existing && existing.transporterId || "")}" maxlength="15" autocomplete="off" /></div>
       <div id="tf-status"></div>
       <button type="button" class="btn btn-secondary btn-block" id="tf-fetch" style="margin-bottom:8px">Fetch / डिटेल्स लाओ</button>
+      <div id="tf-fetch-helper" class="hidden"></div>
       <div class="field"><label>Name *</label><input id="tf-name" value="${escapeHtml(existing && existing.name || "")}" /></div>
       <p class="error" id="tf-err"></p>
       <button class="btn btn-primary btn-block" id="tf-save">Save transporter</button>`;
     wireGstinField({
       input: $("#tf-id"), statusEl: $("#tf-status"), fetchBtn: $("#tf-fetch"),
+      helperPanel: $("#tf-fetch-helper"),
       onApply: (det) => {
         if (det.tradeName || det.legalName) $("#tf-name").value = det.tradeName || det.legalName;
       }
@@ -1141,7 +1381,7 @@
   }
 
   window.__gstBill = {
-    seedDemo, validateGstin, amountInWords, resolveGstinDetails, offlineFromGstin,
+    seedDemo, validateGstin, amountInWords, resolveGstinDetails, offlineFromGstin, parsePortalText,
     getStore: () => store, setStore: (s) => { store = s; save(); },
     computeBill: () => computeBill(draft), getDraft: () => draft, setDraft: (d) => { draft = Object.assign(emptyDraft(), d); },
     buildEwayJson, buildPdf, showScreen, startBill, generateBill, getLastBill: () => lastBill,
