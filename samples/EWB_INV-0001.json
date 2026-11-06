@@ -1,0 +1,61 @@
+{
+  "version": "1.0.0621",
+  "billLists": [
+    {
+      "userGstin": "09AAAAA0000A1Z0",
+      "supplyType": "O",
+      "subSupplyType": 1,
+      "subSupplyDesc": "",
+      "docType": "INV",
+      "docNo": "INV/0001",
+      "docDate": "06/11/2026",
+      "fromGstin": "09AAAAA0000A1Z0",
+      "fromTrdName": "Shree Silk House",
+      "fromAddr1": "Chowk, Varanasi, Uttar Pradesh",
+      "fromAddr2": "",
+      "fromPlace": "UP",
+      "fromPincode": 221001,
+      "fromStateCode": 9,
+      "actualFromStateCode": 9,
+      "toGstin": "09BBBBB0000B1ZR",
+      "toTrdName": "Jyoti Krishna Saree Centre",
+      "toAddr1": "Lanka, Varanasi, Uttar Pradesh",
+      "toAddr2": "",
+      "toPlace": "UP",
+      "toPincode": 221005,
+      "toStateCode": 9,
+      "actualToStateCode": 9,
+      "transactionType": 1,
+      "otherValue": 0,
+      "totalValue": 15000,
+      "cgstValue": 375,
+      "sgstValue": 375,
+      "igstValue": 0,
+      "cessValue": 0,
+      "cessNonAdvolValue": 0,
+      "totInvValue": 15750,
+      "transporterId": "09CCCCC1111C1ZC",
+      "transporterName": "Shree Hari Transport",
+      "transDocNo": "",
+      "transDocDate": "",
+      "transMode": "1",
+      "transDistance": "25",
+      "vehicleNo": "UP65AB1234",
+      "vehicleType": "R",
+      "itemList": [
+        {
+          "productName": "Saree",
+          "productDesc": "Saree",
+          "hsnCode": 5407,
+          "quantity": 10,
+          "qtyUnit": "PCS",
+          "taxableAmount": 15000,
+          "sgstRate": 2.5,
+          "cgstRate": 2.5,
+          "igstRate": 0,
+          "cessRate": 0
+        }
+      ]
+    }
+  ]
+}

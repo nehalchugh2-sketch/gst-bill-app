@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b5fff" />
+  <meta name="description" content="Simple GST tax invoice and e-way bill JSON for traders" />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" href="./icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <title>GST Bill</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app" id="app">
+    <!-- HOME -->
+    <section class="screen active" id="screen-home">
+      <div class="topbar">
+        <div>
+          <h1>GST Bill <span class="sub">Invoice + E-Way · आसान बिल</span></h1>
+        </div>
+      </div>
+      <div class="nav-home">
+        <button class="home-tile primary" data-go="bill-buyer">
+          <span class="emoji">🧾</span>
+          <strong>Naya Bill / नया बिल</strong>
+          <span>Tap to create tax invoice</span>
+        </button>
+        <button class="home-tile" data-go="history">
+          <span class="emoji">📂</span>
+          <strong>Bills / बिल</strong>
+          <span>History &amp; re-download</span>
+        </button>
+        <button class="home-tile" data-go="masters">
+          <span class="emoji">👥</span>
+          <strong>Masters</strong>
+          <span>Buyers · Items · Transport</span>
+        </button>
+        <button class="home-tile" data-go="setup">
+          <span class="emoji">⚙️</span>
+          <strong>Setup / सेटअप</strong>
+          <span>Your shop GSTIN</span>
+        </button>
+        <button class="home-tile" data-go="help" style="grid-column:1/-1">
+          <span class="emoji">❓</span>
+          <strong>E-Way upload help / मदद</strong>
+          <span>How to upload JSON on portal</span>
+        </button>
+      </div>
+      <div class="card" id="home-seller-card" style="margin-top:8px"></div>
+    </section>
+
+    <!-- SETUP -->
+    <section class="screen" id="screen-setup">
+      <div class="topbar">
+        <button class="icon-btn" data-go="home" aria-label="Back">←</button>
+        <h1>Setup / सेटअप <span class="sub">Your shop details (once)</span></h1>
+      </div>
+      <div class="card" id="setup-form"></div>
+      <div class="footer-actions"><div class="inner">
+        <button class="btn btn-primary btn-block" id="btn-save-setup">Save / सेव</button>
+      </div></div>
+    </section>
+
+    <!-- MASTERS -->
+    <section class="screen" id="screen-masters">
+      <div class="topbar">
+        <button class="icon-btn" data-go="home" aria-label="Back">←</button>
+        <h1>Masters <span class="sub">Buyers · Items · Transporters</span></h1>
+      </div>
+      <div class="chip-row" id="master-tabs">
+        <button class="chip on" data-master="buyers">Buyers / खरीदार</button>
+        <button class="chip" data-master="items">Items / सामान</button>
+        <button class="chip" data-master="transporters">Transport</button>
+      </div>
+      <div class="card" id="masters-panel"></div>
+    </section>
+
+    <!-- BILL: BUYER -->
+    <section class="screen" id="screen-bill-buyer">
+      <div class="topbar">
+        <button class="icon-btn" data-go="home" aria-label="Back">←</button>
+        <h1>1. Kisko? / किसको? <span class="sub">Select buyer</span></h1>
+      </div>
+      <input class="search" id="buyer-search" placeholder="Search buyer / खोजें" />
+      <div class="list" id="buyer-list"></div>
+      <button class="btn btn-secondary btn-block" id="btn-add-buyer">+ New buyer / नया खरीदार</button>
+      <div class="card hidden" id="buyer-form-card"></div>
+      <div class="footer-actions"><div class="inner">
+        <button class="btn btn-ghost" data-go="home">Cancel</button>
+        <button class="btn btn-primary" id="btn-buyer-next" disabled>Next / आगे →</button>
+      </div></div>
+    </section>
+
+    <!-- BILL: ITEMS -->
+    <section class="screen" id="screen-bill-items">
+      <div class="topbar">
+        <button class="icon-btn" data-go="bill-buyer" aria-label="Back">←</button>
+        <h1>2. Kya? / क्या? <span class="sub">Select items</span></h1>
+      </div>
+      <input class="search" id="item-search" placeholder="Search item / सामान खोजें" />
+      <div class="list" id="item-list"></div>
+      <button class="btn btn-secondary btn-block" id="btn-add-item">+ New item / नया सामान</button>
+      <div class="card hidden" id="item-form-card"></div>
+      <div class="footer-actions"><div class="inner">
+        <button class="btn btn-ghost" data-go="bill-buyer">← Back</button>
+        <button class="btn btn-primary" id="btn-items-next" disabled>Next / आगे →</button>
+      </div></div>
+    </section>
+
+    <!-- BILL: QTY -->
+    <section class="screen" id="screen-bill-qty">
+      <div class="topbar">
+        <button class="icon-btn" data-go="bill-items" aria-label="Back">←</button>
+        <h1>3. Kitna? / कितना? <span class="sub">Qty &amp; rate</span></h1>
+      </div>
+      <div id="qty-lines"></div>
+      <div class="totals" id="qty-totals"></div>
+      <div class="footer-actions"><div class="inner">
+        <button class="btn btn-ghost" data-go="bill-items">← Back</button>
+        <button class="btn btn-primary" id="btn-qty-next">Next / आगे →</button>
+      </div></div>
+    </section>
+
+    <!-- BILL: EWAY -->
+    <section class="screen" id="screen-bill-eway">
+      <div class="topbar">
+        <button class="icon-btn" data-go="bill-qty" aria-label="Back">←</button>
+        <h1>4. E-Way Bill? <span class="sub">ई-वे बिल बनाना है?</span></h1>
+      </div>
+      <div class="card">
+        <p class="hint" id="eway-note"></p>
+        <div class="big-choice">
+          <button class="choice yes" id="eway-yes">हाँ / YES</button>
+          <button class="choice no" id="eway-no">नहीं / NO</button>
+        </div>
+      </div>
+      <div class="card hidden" id="eway-details">
+        <h2>Transport / परिवहन</h2>
+        <div class="field">
+          <label>Transporter / ट्रांसपोर्टर</label>
+          <select id="eway-transporter"></select>
+        </div>
+        <button class="btn btn-secondary btn-block" id="btn-add-transporter-inline" style="margin-bottom:12px">+ New transporter</button>
+        <div class="card hidden" id="transporter-form-card" style="box-shadow:none;margin-bottom:12px"></div>
+        <div class="field">
+          <label>Vehicle No / गाड़ी नंबर (optional)</label>
+          <input id="eway-vehicle" placeholder="UP65AB1234" autocomplete="off" />
+        </div>
+        <div class="row">
+          <div class="field">
+            <label>Distance km / दूरी</label>
+            <input id="eway-distance" type="number" min="1" value="10" />
+          </div>
+          <div class="field">
+            <label>Mode</label>
+            <select id="eway-mode"><option value="1">Road / सड़क</option></select>
+          </div>
+        </div>
+        <p class="hint">Part B (vehicle) can be filled later on the portal if blank now.</p>
+      </div>
+      <div class="footer-actions"><div class="inner">
+        <button class="btn btn-ghost" data-go="bill-qty">← Back</button>
+        <button class="btn btn-primary" id="btn-eway-next" disabled>Next / आगे →</button>
+      </div></div>
+    </section>
+
+    <!-- BILL: CONFIRM -->
+    <section class="screen" id="screen-bill-confirm">
+      <div class="topbar">
+        <button class="icon-btn" data-go="bill-eway" aria-label="Back">←</button>
+        <h1>5. Check / जाँच <span class="sub">Confirm before generate</span></h1>
+      </div>
+      <div class="card summary-block" id="confirm-summary"></div>
+      <div class="totals" id="confirm-totals"></div>
+      <div class="footer-actions"><div class="inner">
+        <button class="btn btn-ghost" data-go="bill-eway">← Back</button>
+        <button class="btn btn-ok" id="btn-generate">✓ Bill banao / बिल बनाओ</button>
+      </div></div>
+    </section>
+
+    <!-- DONE -->
+    <section class="screen" id="screen-bill-done">
+      <div class="topbar">
+        <h1>Done! / हो गया ✅ <span class="sub" id="done-inv-no"></span></h1>
+      </div>
+      <div class="card">
+        <p class="hint">Tax invoice PDF ready. Share on WhatsApp or download. If e-way selected, also download JSON for portal upload.</p>
+        <div class="list" style="gap:10px">
+          <button class="btn btn-primary btn-block" id="btn-dl-pdf">⬇️ Download Invoice PDF</button>
+          <button class="btn btn-secondary btn-block" id="btn-share-pdf">💬 Share WhatsApp / Share</button>
+          <button class="btn btn-warn btn-block hidden" id="btn-dl-json">⬇️ Download E-Way JSON</button>
+        </div>
+      </div>
+      <div class="card hidden" id="done-eway-help">
+        <h2>Upload e-way JSON</h2>
+        <ol class="steps-help">
+          <li>Open <strong>ewaybillgst.gov.in</strong> and login</li>
+          <li>Menu → <strong>e-Waybill</strong> → <strong>Generate Bulk</strong></li>
+          <li>Upload the downloaded JSON file</li>
+          <li>Print / save the e-way bill</li>
+        </ol>
+      </div>
+      <div class="footer-actions"><div class="inner">
+        <button class="btn btn-primary btn-block" data-go="home">Home / होम</button>
+      </div></div>
+    </section>
+
+    <!-- HISTORY -->
+    <section class="screen" id="screen-history">
+      <div class="topbar">
+        <button class="icon-btn" data-go="home" aria-label="Back">←</button>
+        <h1>Bills / बिल <span class="sub">History</span></h1>
+      </div>
+      <div class="list" id="history-list"></div>
+    </section>
+
+    <!-- HELP -->
+    <section class="screen" id="screen-help">
+      <div class="topbar">
+        <button class="icon-btn" data-go="home" aria-label="Back">←</button>
+        <h1>Help / मदद</h1>
+      </div>
+      <div class="card">
+        <h2>E-Way Bill JSON upload</h2>
+        <ol>
+          <li>Create bill in this app → Download E-Way JSON</li>
+          <li>Go to <strong>https://ewaybillgst.gov.in</strong></li>
+          <li>Login with your e-way bill user ID</li>
+          <li><strong>e-Waybill → Generate Bulk</strong></li>
+          <li>Choose the JSON file and upload</li>
+          <li>Verify and generate; print the e-way bill</li>
+        </ol>
+        <p class="hint">Official bulk tools &amp; schema: docs.ewaybillgst.gov.in/html/formatdownloadnew.html</p>
+      </div>
+      <div class="card">
+        <h2>Install on phone</h2>
+        <p class="hint">Chrome → menu → <strong>Add to Home screen</strong> / Install app. Works offline after first open.</p>
+      </div>
+      <div class="card">
+        <h2>Note</h2>
+        <p class="hint">You are responsible for invoice &amp; e-way bill correctness. This app does not store portal passwords. Sample GSTINs in demo are fake.</p>
+      </div>
+    </section>
+  </div>
+
+  <script src="./vendor/jspdf.umd.min.js"></script>
+  <script src="./vendor/jspdf.plugin.autotable.min.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
