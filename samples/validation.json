@@ -1,21 +1,37 @@
 {
-  "checks": {
-    "version": true,
-    "hasBillLists": true,
-    "supplyType": true,
-    "subSupplyType": true,
-    "docType": true,
-    "fromGstin": true,
-    "toGstin": true,
-    "vehicleNo": true,
-    "itemHsn": true,
+  "intra": {
+    "itemsGross": true,
     "taxable": true,
     "cgst": true,
     "sgst": true,
-    "igst": true,
-    "totInv": true,
-    "amountWords": true,
-    "gstinChecksum": true
+    "grand": true,
+    "jsonTaxable": true,
+    "jsonCgst": true,
+    "jsonSgst": true,
+    "jsonTot": true
+  },
+  "mid": {
+    "taxable": 14500,
+    "cgst": 362.5,
+    "sgst": 362.5,
+    "igst": 0,
+    "grand": 15225,
+    "itemsGross": 15000
+  },
+  "inter": {
+    "interState": true,
+    "taxable": 14500,
+    "igst": 725,
+    "cgst": 0,
+    "sgst": 0,
+    "grand": 15225
+  },
+  "off": {
+    "ok": true,
+    "source": "master-buyer",
+    "state": "09",
+    "pan": "BBBBB0000B",
+    "name": "Jyoti Krishna Saree Centre"
   },
   "json": {
     "version": "1.0.0621",
@@ -46,13 +62,13 @@
         "actualToStateCode": 9,
         "transactionType": 1,
         "otherValue": 0,
-        "totalValue": 15000,
-        "cgstValue": 375,
-        "sgstValue": 375,
+        "totalValue": 14500,
+        "cgstValue": 362.5,
+        "sgstValue": 362.5,
         "igstValue": 0,
         "cessValue": 0,
         "cessNonAdvolValue": 0,
-        "totInvValue": 15750,
+        "totInvValue": 15225,
         "transporterId": "09CCCCC1111C1ZC",
         "transporterName": "Shree Hari Transport",
         "transDocNo": "",
@@ -68,7 +84,7 @@
             "hsnCode": 5407,
             "quantity": 10,
             "qtyUnit": "PCS",
-            "taxableAmount": 15000,
+            "taxableAmount": 14500,
             "sgstRate": 2.5,
             "cgstRate": 2.5,
             "igstRate": 0,

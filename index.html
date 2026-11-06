@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#0b5fff" />
   <meta name="description" content="Simple GST tax invoice and e-way bill JSON for traders" />
-  <link rel="manifest" href="./manifest.json" />
-  <link rel="icon" href="./icons/icon-192.png" />
-  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <title>GST Bill</title>
-  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div class="app" id="app">
@@ -122,10 +122,39 @@
       </div></div>
     </section>
 
+    
+    <!-- BILL: ADD / LESS -->
+    <section class="screen" id="screen-bill-addless">
+      <div class="topbar">
+        <button class="icon-btn" data-go="bill-qty" aria-label="Back">←</button>
+        <h1>3b. Add / Less <span class="sub">जोड़ / घटाव · Freight, Discount</span></h1>
+      </div>
+      <div class="card">
+        <p class="hint">GST items ke NET taxable par lagega (gross + add − less). Skip kar sakte ho.</p>
+        <div class="addless-cols">
+          <div class="addless-col add">
+            <h2 class="col-title">Add (+) / जोड़ो</h2>
+            <div id="add-rows"></div>
+            <button type="button" class="btn btn-secondary btn-block btn-sm" id="btn-add-charge">+ row</button>
+          </div>
+          <div class="addless-col less">
+            <h2 class="col-title">Less (−) / घटाओ</h2>
+            <div id="less-rows"></div>
+            <button type="button" class="btn btn-danger btn-block btn-sm" id="btn-add-discount">+ row</button>
+          </div>
+        </div>
+      </div>
+      <div class="totals" id="addless-totals"></div>
+      <div class="footer-actions"><div class="inner">
+        <button class="btn btn-ghost" data-go="bill-qty">← Back</button>
+        <button class="btn btn-primary" id="btn-addless-next">Next / आगे →</button>
+      </div></div>
+    </section>
+
     <!-- BILL: EWAY -->
     <section class="screen" id="screen-bill-eway">
       <div class="topbar">
-        <button class="icon-btn" data-go="bill-qty" aria-label="Back">←</button>
+        <button class="icon-btn" data-go="bill-addless" aria-label="Back">←</button>
         <h1>4. E-Way Bill? <span class="sub">ई-वे बिल बनाना है?</span></h1>
       </div>
       <div class="card">
@@ -160,7 +189,7 @@
         <p class="hint">Part B (vehicle) can be filled later on the portal if blank now.</p>
       </div>
       <div class="footer-actions"><div class="inner">
-        <button class="btn btn-ghost" data-go="bill-qty">← Back</button>
+        <button class="btn btn-ghost" data-go="bill-addless">← Back</button>
         <button class="btn btn-primary" id="btn-eway-next" disabled>Next / आगे →</button>
       </div></div>
     </section>
@@ -244,8 +273,8 @@
     </section>
   </div>
 
-  <script src="./vendor/jspdf.umd.min.js"></script>
-  <script src="./vendor/jspdf.plugin.autotable.min.js"></script>
-  <script src="./app.js"></script>
+  <script src="vendor/jspdf.umd.min.js"></script>
+  <script src="vendor/jspdf.plugin.autotable.min.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

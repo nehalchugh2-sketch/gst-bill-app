@@ -1,4 +1,4 @@
-const CACHE = 'gst-bill-v1';
+const CACHE = 'gst-bill-v3';
 const ASSETS = [
   './',
   './index.html',
